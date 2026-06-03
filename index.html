@@ -472,49 +472,33 @@ async function doLogin() {
   }
 
   try {
-    // Try to fetch data with password — if it works, password is correct
-    // We store a "password hash" record; if password matches, Supabase RLS allows read
-    const { data, error } = await sb
-      .from('app_data')
-      .select('value')
-      .eq('key', 'auth_check')
-      .single();
+    // Call RPC to verify password and get data
+    const { data, error } = await sb.rpc('get_report', { pw: password });
 
     if (error) {
-      // Table might not exist yet — check against stored password
-      // For initial setup, try direct password check
-      const { data: pwData, error: pwError } = await sb
-        .from('app_config')
-        .select('value')
-        .eq('key', 'shared_password')
-        .single();
+      errorEl.textContent = '连接失败: ' + error.message;
+      errorEl.style.display = 'block';
+      return;
+    }
 
-      if (pwError) {
-        // First time setup — table doesn't exist. Let's check if this is a password we stored
-        const savedPw = localStorage.getItem('credit_progress_pw_hash');
-        if (savedPw) {
-          const hash = await hashPassword(password);
-          if (hash === savedPw) {
-            loginSuccess(password);
-            return;
-          }
-        }
-        errorEl.textContent = '系统尚未初始化，请联系管理员在 Supabase 中运行 SQL 建表。';
+    // If data is null, password is wrong (or DB not initialized)
+    if (data === null) {
+      // Check if DB is initialized
+      const { data: cfgData } = await sb
+        .from('app_config').select('value').eq('key', 'shared_password').single();
+
+      if (!cfgData) {
+        errorEl.textContent = '数据库未初始化，请先在 Supabase 中运行 SQL 建表。';
         errorEl.style.display = 'block';
         return;
       }
 
-      if (pwData && pwData.value === password) {
-        loginSuccess(password);
-        return;
-      }
       errorEl.textContent = '密码错误';
       errorEl.style.display = 'block';
       return;
     }
 
-    // Table exists, password check passed via RLS
-    loginSuccess(password);
+    loginSuccess(password, data);
   } catch (e) {
     console.error('Login error:', e);
     errorEl.textContent = '连接失败，请检查网络后重试';
@@ -522,105 +506,45 @@ async function doLogin() {
   }
 }
 
-async function hashPassword(pw) {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(pw + 'credit-progress-salt');
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-}
-
-function loginSuccess(password) {
+function loginSuccess(password, reportText) {
   isLoggedIn = true;
   document.getElementById('loginScreen').style.display = 'none';
   document.getElementById('mainContent').classList.add('visible');
 
   // Save password hash for auto-login
-  hashPassword(password).then(hash => {
-    localStorage.setItem('credit_progress_pw_hash', hash);
-  });
+  localStorage.setItem('credit_progress_pw', password);
 
-  // Load data from cloud
-  loadFromCloud();
+  // Load report data from RPC response
+  if (reportText) {
+    document.getElementById('rawInput').value = reportText;
+    reportData = parseReports(reportText);
+    if (reportData && reportData.weeks.length > 0) {
+      renderAll();
+    }
+  }
+  document.getElementById('saveBtn').disabled = false;
 }
 
 async function tryAutoLogin() {
-  const savedHash = localStorage.getItem('credit_progress_pw_hash');
-  if (!savedHash) return false;
+  const savedPw = localStorage.getItem('credit_progress_pw');
+  if (!savedPw) return false;
 
-  // Try to load data — if it works, we're authenticated
   try {
-    const { data, error } = await sb
-      .from('app_data')
-      .select('value')
-      .eq('key', 'report_data')
-      .single();
+    const { data, error } = await sb.rpc('get_report', { pw: savedPw });
 
-    if (data) {
-      isLoggedIn = true;
-      document.getElementById('loginScreen').style.display = 'none';
-      document.getElementById('mainContent').classList.add('visible');
-      loadFromCloud();
-      return true;
-    }
-
-    // No data yet but table is accessible — still allow login
-    // Check if we can at least read the app_config
-    const { data: cfgData } = await sb
-      .from('app_config')
-      .select('value')
-      .eq('key', 'shared_password')
-      .single();
-
-    if (cfgData) {
-      isLoggedIn = true;
-      document.getElementById('loginScreen').style.display = 'none';
-      document.getElementById('mainContent').classList.add('visible');
-      loadFromCloud();
+    if (!error && data !== null) {
+      loginSuccess(savedPw, data);
       return true;
     }
   } catch (e) {
     console.log('Auto-login failed:', e.message);
   }
-
   return false;
 }
 
 // ====== CLOUD DATA ======
-async function loadFromCloud() {
-  try {
-    const { data, error } = await sb
-      .from('app_data')
-      .select('value')
-      .eq('key', 'report_data')
-      .single();
-
-    if (data && data.value) {
-      document.getElementById('rawInput').value = data.value;
-      reportData = parseReports(data.value);
-      if (reportData && reportData.weeks.length > 0) {
-        renderAll();
-      }
-      document.getElementById('saveBtn').disabled = false;
-      return;
-    }
-  } catch (e) {
-    console.log('Load from cloud failed:', e.message);
-  }
-
-  // Fallback to localStorage
-  try {
-    const saved = localStorage.getItem('credit_progress_input');
-    if (saved) {
-      document.getElementById('rawInput').value = saved;
-      reportData = parseReports(saved);
-      if (reportData && reportData.weeks.length > 0) {
-        renderAll();
-      }
-    }
-  } catch (e) { /* ignore */ }
-
-  document.getElementById('saveBtn').disabled = false;
+function loadFromCloud() {
+  // Data already loaded during login via RPC
 }
 
 async function saveToCloud() {
@@ -632,25 +556,31 @@ async function saveToCloud() {
 
   const saveBtn = document.getElementById('saveBtn');
   const saveStatus = document.getElementById('saveStatus');
+  const password = localStorage.getItem('credit_progress_pw');
+
+  if (!password) {
+    saveStatus.textContent = '✗ 未登录';
+    saveStatus.className = 'save-status error';
+    return;
+  }
 
   saveBtn.disabled = true;
   saveStatus.textContent = '保存中...';
   saveStatus.className = 'save-status';
 
   try {
-    const { error } = await sb
-      .from('app_data')
-      .upsert({ key: 'report_data', value: rawText, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+    const { data, error } = await sb.rpc('save_report', { pw: password, data_value: rawText });
 
     if (error) throw error;
-
-    saveStatus.textContent = '✓ 已保存到云端';
-    saveStatus.className = 'save-status success';
-
-    // Also save locally
-    try { localStorage.setItem('credit_progress_input', rawText); } catch (e) { /* ignore */ }
-
-    setTimeout(() => { saveStatus.textContent = ''; }, 3000);
+    if (data === false) {
+      saveStatus.textContent = '✗ 密码验证失败，请刷新页面重新登录';
+      saveStatus.className = 'save-status error';
+    } else {
+      saveStatus.textContent = '✓ 已保存到云端';
+      saveStatus.className = 'save-status success';
+      try { localStorage.setItem('credit_progress_input', rawText); } catch (e) { /* ignore */ }
+      setTimeout(() => { saveStatus.textContent = ''; }, 3000);
+    }
   } catch (e) {
     saveStatus.textContent = '✗ 保存失败: ' + e.message;
     saveStatus.className = 'save-status error';
