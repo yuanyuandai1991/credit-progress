@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes">
+<title>授信进展周报对比工具</title>
+<style>
+/* ===== Reset & Variables ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --font-scale: 1;
+  --bg: #f5f6f8;
+  --card-bg: #fff;
+  --text: #2c3e50;
+  --text-secondary: #6b7c93;
+  --border: #e2e6ed;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  --radius: 8px;
+
+  --progress: #d4edda;
+  --progress-text: #155724;
+  --minor: #fff3cd;
+  --minor-text: #856404;
+  --stalled: #fce4e4;
+  --stalled-text: #a71d2a;
+  --new-item: #d1ecf1;
+  --new-item-text: #0c5460;
+  --removed: #e8e8e8;
+  --removed-text: #999;
+
+  --diff-add-bg: #d4edda;
+  --diff-add-text: #155724;
+  --diff-del-bg: #fce4e4;
+  --diff-del-text: #a71d2a;
+
+  --accent: #3b6df0;
+  --accent-hover: #2b54d4;
+  --font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", "WenQuanYi Micro Hei", sans-serif;
+  --font-mono: "SF Mono", "Menlo", "Consolas", monospace;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  min-height: 100vh;
+  font-size: calc(1rem * var(--font-scale));
+}
+
+/* ===== Login Screen ===== */
+.login-screen {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100vh; padding: 20px; background: linear-gradient(135deg, #1a3a5c 0%, #2b5f8e 100%);
+}
+.login-box {
+  background: #fff; border-radius: 16px; padding: 36px 28px;
+  max-width: 380px; width: 100%; box-shadow: 0 8px 30px rgba(0,0,0,0.25);
+  text-align: center;
+}
+.login-box h1 { font-size: 1.3rem; margin-bottom: 6px; color: #1a3a5c; }
+.login-box .login-sub { font-size: 0.85rem; color: #6b7c93; margin-bottom: 24px; }
+.login-box label { display: block; text-align: left; font-size: 0.85rem; font-weight: 600; margin-bottom: 6px; }
+.login-box input[type="password"] {
+  width: 100%; padding: 12px 14px; border: 1.5px solid #e2e6ed; border-radius: 8px;
+  font-size: 1rem; font-family: var(--font); margin-bottom: 16px;
+}
+.login-box input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,109,240,0.12); }
+.login-box .btn { width: 100%; padding: 12px; font-size: 1rem; }
+.login-box .login-error { color: #dc3545; font-size: 0.82rem; margin-top: 10px; display: none; }
+.login-box .login-hint { font-size: 0.75rem; color: #999; margin-top: 16px; }
+
+/* ===== Header ===== */
+.header {
+  background: linear-gradient(135deg, #1a3a5c 0%, #2b5f8e 100%);
+  color: #fff;
+  padding: 12px 20px;
+  display: flex; align-items: center; justify-content: space-between;
+  flex-wrap: wrap; gap: 8px;
+}
+.header h1 { font-size: 1.15rem; font-weight: 600; letter-spacing: 0.02em; }
+.header .subtitle { font-size: 0.78rem; opacity: 0.75; }
+.header-right { display: flex; align-items: center; gap: 10px; }
+
+/* Font size controls */
+.font-controls { display: flex; align-items: center; gap: 4px; }
+.font-btn {
+  width: 32px; height: 32px; border-radius: 50%; border: 1.5px solid rgba(255,255,255,0.4);
+  background: rgba(255,255,255,0.1); color: #fff; cursor: pointer;
+  font-size: 1rem; font-weight: 700; display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.font-btn:hover { background: rgba(255,255,255,0.25); }
+.font-label { font-size: 0.75rem; opacity: 0.8; min-width: 36px; text-align: center; }
+
+.main-content { display: none; }
+.main-content.visible { display: block; }
+
+.container { max-width: 1400px; margin: 0 auto; padding: 12px; }
+
+/* ===== Input Area ===== */
+.input-section { margin-bottom: 12px; }
+.input-toggle {
+  display: flex; align-items: center; gap: 8px; cursor: pointer;
+  padding: 10px 14px; background: var(--card-bg); border-radius: var(--radius);
+  box-shadow: var(--shadow); font-weight: 600; font-size: 0.88rem;
+  user-select: none;
+}
+.input-toggle .arrow { transition: transform 0.2s; font-size: 0.7rem; }
+.input-toggle.open .arrow { transform: rotate(90deg); }
+.input-body { display: none; margin-top: 8px; }
+.input-body.open { display: block; }
+.input-actions { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; align-items: center; }
+
+.btn {
+  padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer;
+  font-size: 0.84rem; font-weight: 600; font-family: var(--font);
+  transition: all 0.15s; white-space: nowrap;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-outline { background: #fff; color: var(--accent); border: 1.5px solid var(--accent); }
+.btn-outline:hover { background: #f0f4ff; }
+.btn-success { background: #28a745; color: #fff; }
+.btn-success:hover { background: #218838; }
+.btn-sm { padding: 5px 12px; font-size: 0.76rem; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.save-status { font-size: 0.78rem; color: var(--text-secondary); margin-left: 4px; }
+.save-status.success { color: #28a745; }
+.save-status.error { color: #dc3545; }
+
+textarea {
+  width: 100%; min-height: 180px; padding: 12px;
+  border: 1.5px solid var(--border); border-radius: var(--radius);
+  font-family: var(--font-mono); font-size: 0.8rem; line-height: 1.7;
+  resize: vertical; background: var(--card-bg);
+}
+textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(59,109,240,0.12); }
+
+/* ===== Tabs ===== */
+.tabs {
+  display: flex; gap: 2px; margin-bottom: 12px;
+  background: var(--card-bg); border-radius: var(--radius);
+  box-shadow: var(--shadow); padding: 3px; overflow-x: auto;
+}
+.tab {
+  padding: 8px 14px; border: none; background: transparent; cursor: pointer;
+  font-size: 0.83rem; font-family: var(--font); border-radius: 6px;
+  white-space: nowrap; color: var(--text-secondary); transition: all 0.15s;
+}
+.tab:hover { color: var(--text); background: #f0f2f5; }
+.tab.active { background: var(--accent); color: #fff; }
+
+/* ===== Legend ===== */
+.legend {
+  display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px;
+  font-size: 0.76rem; align-items: center;
+}
+.legend-item { display: flex; align-items: center; gap: 4px; }
+.legend-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+
+/* ===== Table View ===== */
+.view { display: none; }
+.view.active { display: block; }
+
+.table-wrap {
+  overflow-x: auto; background: var(--card-bg); border-radius: var(--radius);
+  box-shadow: var(--shadow); -webkit-overflow-scrolling: touch;
+}
+.table-wrap table {
+  width: 100%; border-collapse: collapse; min-width: 800px;
+}
+.table-wrap th, .table-wrap td {
+  padding: 8px 12px; border: 1px solid var(--border); vertical-align: top;
+  font-size: 0.8rem; line-height: 1.55;
+}
+.table-wrap th {
+  background: #f8f9fb; font-weight: 700; text-align: center;
+  position: sticky; top: 0; z-index: 1;
+}
+.table-wrap th.bank-col { text-align: left; width: 70px; }
+.table-wrap th.week-col { min-width: 220px; }
+.table-wrap td.bank-name {
+  font-weight: 700; text-align: center; background: #f8f9fb;
+  position: sticky; left: 0; z-index: 1; font-size: 0.83rem;
+}
+.cell-content { position: relative; }
+.cell-badge {
+  display: inline-block; padding: 2px 7px; border-radius: 10px;
+  font-size: 0.68rem; font-weight: 700; margin-bottom: 4px;
+}
+.cell-badge.progress { background: var(--progress); color: var(--progress-text); }
+.cell-badge.minor { background: var(--minor); color: var(--minor-text); }
+.cell-badge.stalled { background: var(--stalled); color: var(--stalled-text); }
+.cell-badge.new { background: var(--new-item); color: var(--new-item-text); }
+.cell-badge.removed { background: var(--removed); color: var(--removed-text); }
+.cell-badge.dup { background: #fce4e4; color: #a71d2a; }
+
+.cell-text { font-size: 0.79rem; color: var(--text); }
+.cell-text.collapsed { max-height: 4.2em; overflow: hidden; position: relative; }
+.cell-text.collapsed::after {
+  content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+  height: 2em; background: linear-gradient(transparent, #fff);
+}
+.cell-expand {
+  color: var(--accent); cursor: pointer; font-size: 0.73rem; font-weight: 600;
+  margin-top: 4px; display: inline-block;
+}
+.cell-expand:hover { text-decoration: underline; }
+
+.diff-add { background: var(--diff-add-bg); color: var(--diff-add-text); padding: 1px 2px; border-radius: 2px; }
+.diff-del { background: var(--diff-del-bg); color: var(--diff-del-text); text-decoration: line-through; padding: 1px 2px; border-radius: 2px; }
+
+/* ===== Card View ===== */
+.card-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 12px;
+}
+.card {
+  background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.card-header {
+  padding: 10px 14px; background: #f8f9fb; font-weight: 700; font-size: 0.88rem;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+.card-body { padding: 0; }
+.card-week {
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+.card-week:last-child { border-bottom: none; }
+.card-week.stalled { background: #fefafa; }
+.card-week.progress { background: #f8fdf8; }
+.card-week.minor { background: #fffefa; }
+.card-week.new { background: #f6fbfc; }
+.card-week-date {
+  font-size: 0.74rem; font-weight: 700; color: var(--text-secondary); margin-bottom: 3px;
+  display: flex; align-items: center; gap: 6px;
+}
+.card-week-date .badge { font-size: 0.64rem; padding: 1px 6px; border-radius: 8px; }
+.card-week-text { font-size: 0.79rem; line-height: 1.55; }
+
+/* ===== Diff Detail View ===== */
+.diff-list { display: flex; flex-direction: column; gap: 8px; }
+.diff-item {
+  background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 12px 14px; border-left: 4px solid transparent;
+}
+.diff-item.progress { border-left-color: #28a745; }
+.diff-item.minor { border-left-color: #ffc107; }
+.diff-item.stalled { border-left-color: #dc3545; }
+.diff-item-header {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap;
+}
+.diff-item-bank { font-weight: 700; font-size: 0.88rem; }
+.diff-item-weeks { font-size: 0.78rem; color: var(--text-secondary); }
+.diff-item-body { font-size: 0.8rem; line-height: 1.6; }
+
+/* ===== Summary View ===== */
+.summary-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px; margin-bottom: 16px;
+}
+.summary-card {
+  background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 14px;
+}
+.summary-card h3 { font-size: 0.88rem; margin-bottom: 8px; }
+.summary-stat {
+  display: flex; justify-content: space-between; padding: 4px 0;
+  font-size: 0.78rem; border-bottom: 1px solid #f0f0f0;
+}
+.summary-stat:last-child { border-bottom: none; }
+.summary-stat .val { font-weight: 700; }
+.progress-bar {
+  height: 7px; border-radius: 3px; background: #e9ecef;
+  margin: 6px 0; overflow: hidden;
+}
+.progress-bar-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+.progress-bar-fill.good { background: #28a745; }
+.progress-bar-fill.warn { background: #ffc107; }
+.progress-bar-fill.bad { background: #dc3545; }
+
+.warnings {
+  background: #fff3cd; border: 1px solid #e6c968; border-radius: var(--radius);
+  padding: 10px 14px; margin-bottom: 12px; font-size: 0.8rem;
+}
+.warnings strong { color: #856404; }
+
+/* ===== Modal ===== */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+  z-index: 1000; align-items: center; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: #fff; border-radius: 12px; max-width: 750px; width: 95%;
+  max-height: 85vh; overflow-y: auto; box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+}
+.modal-header {
+  padding: 14px 18px; border-bottom: 1px solid var(--border);
+  display: flex; justify-content: space-between; align-items: center;
+  position: sticky; top: 0; background: #fff; z-index: 1; border-radius: 12px 12px 0 0;
+}
+.modal-header h3 { font-size: 0.98rem; }
+.modal-close {
+  background: none; border: none; font-size: 1.3rem; cursor: pointer;
+  color: var(--text-secondary); width: 34px; height: 34px;
+  display: flex; align-items: center; justify-content: center; border-radius: 50%;
+}
+.modal-close:hover { background: #f0f0f0; }
+.modal-body { padding: 16px; }
+.modal-body h4 { font-size: 0.83rem; color: var(--text-secondary); margin: 8px 0 4px; }
+.modal-body .diff-text { font-size: 0.8rem; line-height: 1.7; padding: 10px; background: #f8f9fb; border-radius: 6px; }
+
+/* ===== Footer ===== */
+.footer {
+  text-align: center; padding: 16px; color: var(--text-secondary); font-size: 0.73rem;
+}
+
+/* ===== Mobile (< 768px) ===== */
+@media (max-width: 768px) {
+  .header { padding: 10px 14px; }
+  .header h1 { font-size: 1rem; }
+  .header .subtitle { display: none; }
+  .container { padding: 8px; }
+  .tab { padding: 7px 10px; font-size: 0.76rem; }
+  .card-grid { grid-template-columns: 1fr; }
+  .summary-grid { grid-template-columns: 1fr 1fr; }
+  .table-wrap table { min-width: 650px; }
+  .table-wrap th.week-col { min-width: 160px; }
+  .modal { width: 98%; max-height: 90vh; }
+  .input-actions { gap: 6px; }
+  .btn { padding: 8px 12px; font-size: 0.8rem; }
+  .login-box { padding: 28px 20px; }
+  /* Larger tap targets on mobile */
+  .cell-expand, .tab, .btn { min-height: 40px; display: inline-flex; align-items: center; }
+  .font-btn { width: 36px; height: 36px; }
+}
+
+@media (max-width: 480px) {
+  .summary-grid { grid-template-columns: 1fr; }
+  .legend { gap: 6px; font-size: 0.68rem; }
+}
+</style>
+</head>
+<body>
+
+<!-- ===== LOGIN SCREEN ===== -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-box">
+    <h1>🔒 授信进展周报</h1>
+    <p class="login-sub">请输入共享密码查看</p>
+    <label for="passwordInput">密码</label>
+    <input type="password" id="passwordInput" placeholder="输入共享密码" autofocus>
+    <button class="btn btn-primary" onclick="doLogin()">确认</button>
+    <p class="login-error" id="loginError"></p>
+    <p class="login-hint">首次使用？联系管理员获取密码。<br>浏览器会记住登录状态，下次自动进入。</p>
+  </div>
+</div>
+
+<!-- ===== MAIN CONTENT ===== -->
+<div class="main-content" id="mainContent">
+
+<div class="header">
+  <div>
+    <h1>授信进展周报对比工具</h1>
+    <div class="subtitle">粘贴原始文字 → 自动解析银行×周次 → 高亮变化</div>
+  </div>
+  <div class="header-right">
+    <div class="font-controls">
+      <button class="font-btn" onclick="changeFont(-1)" title="缩小字号">A-</button>
+      <span class="font-label" id="fontLabel">标准</span>
+      <button class="font-btn" onclick="changeFont(1)" title="放大字号">A+</button>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+  <!-- Input Section -->
+  <div class="input-section">
+    <div class="input-toggle open" id="inputToggle" onclick="toggleInput()">
+      <span class="arrow">▶</span> 数据输入区（粘贴原始周报文字）
+    </div>
+    <div class="input-body open" id="inputBody">
+      <div class="input-actions">
+        <button class="btn btn-primary" onclick="parseAndRender()">🔍 解析并对比</button>
+        <button class="btn btn-outline" onclick="loadDemo()">📋 加载示例</button>
+        <button class="btn btn-success" onclick="saveToCloud()" id="saveBtn" disabled>☁️ 保存到云端</button>
+        <span class="save-status" id="saveStatus"></span>
+      </div>
+      <textarea id="rawInput" placeholder="在此粘贴原始周报文字，格式如：
+1、2026.4.30授信进展如下：
+中信：...
+浦发：...
+建行：...
+兴业：...
+浙商：...
+
+2、2026.5.9授信进展如下：
+..."></textarea>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('table')">📊 表格视图</button>
+    <button class="tab" onclick="switchTab('card')">🃏 卡片视图</button>
+    <button class="tab" onclick="switchTab('diff')">🔍 差异详情</button>
+    <button class="tab" onclick="switchTab('summary')">📈 总结仪表盘</button>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="legend-item"><span class="legend-dot" style="background:#28a745"></span> 进展</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#ffc107"></span> 微调</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#dc3545"></span> 停滞</div>
+    <div class="legend-item"><span class="legend-dot" style="background:#17a2b8"></span> 新增</div>
+    <span style="color:var(--text-secondary);font-size:0.7rem;">删除线=删除 &nbsp; 绿色=新增</span>
+  </div>
+
+  <!-- Warnings -->
+  <div class="warnings" id="warnings" style="display:none"></div>
+
+  <!-- Views -->
+  <div class="view active" id="view-table"></div>
+  <div class="view" id="view-card"></div>
+  <div class="view" id="view-diff"></div>
+  <div class="view" id="view-summary"></div>
+</div>
+
+<div class="footer">授信进展周报对比工具 · 数据存储于云端 · 需密码访问</div>
+
+</div><!-- /main-content -->
+
+<!-- Modal -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <h3 id="modalTitle"></h3>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+// ====== SUPABASE CONFIG ======
+const SUPABASE_URL = 'https://xewouklagifgvbeqizoq.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inhld291a2xhZ2lmd3ZiZXFpem9xIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0NTM0NTcsImV4cCI6MjA5NjAyOTQ1N30.Wkf69uw5-K33Qhh_urgyZQ3SRZiRS_w8l9rfVW4--kk';
+const { createClient } = supabase;
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ====== GLOBAL STATE ======
+let reportData = null;
+let isLoggedIn = false;
+
+// ====== AUTH ======
+async function doLogin() {
+  const password = document.getElementById('passwordInput').value.trim();
+  const errorEl = document.getElementById('loginError');
+
+  if (!password) {
+    errorEl.textContent = '请输入密码';
+    errorEl.style.display = 'block';
+    return;
+  }
+
+  try {
+    // Try to fetch data with password — if it works, password is correct
+    // We store a "password hash" record; if password matches, Supabase RLS allows read
+    const { data, error } = await sb
+      .from('app_data')
+      .select('value')
+      .eq('key', 'auth_check')
+      .single();
+
+    if (error) {
+      // Table might not exist yet — check against stored password
+      // For initial setup, try direct password check
+      const { data: pwData, error: pwError } = await sb
+        .from('app_config')
+        .select('value')
+        .eq('key', 'shared_password')
+        .single();
+
+      if (pwError) {
+        // First time setup — table doesn't exist. Let's check if this is a password we stored
+        const savedPw = localStorage.getItem('credit_progress_pw_hash');
+        if (savedPw) {
+          const hash = await hashPassword(password);
+          if (hash === savedPw) {
+            loginSuccess(password);
+            return;
+          }
+        }
+        errorEl.textContent = '系统尚未初始化，请联系管理员在 Supabase 中运行 SQL 建表。';
+        errorEl.style.display = 'block';
+        return;
+      }
+
+      if (pwData && pwData.value === password) {
+        loginSuccess(password);
+        return;
+      }
+      errorEl.textContent = '密码错误';
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    // Table exists, password check passed via RLS
+    loginSuccess(password);
+  } catch (e) {
+    console.error('Login error:', e);
+    errorEl.textContent = '连接失败，请检查网络后重试';
+    errorEl.style.display = 'block';
+  }
+}
+
+async function hashPassword(pw) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(pw + 'credit-progress-salt');
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function loginSuccess(password) {
+  isLoggedIn = true;
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('mainContent').classList.add('visible');
+
+  // Save password hash for auto-login
+  hashPassword(password).then(hash => {
+    localStorage.setItem('credit_progress_pw_hash', hash);
+  });
+
+  // Load data from cloud
+  loadFromCloud();
+}
+
+async function tryAutoLogin() {
+  const savedHash = localStorage.getItem('credit_progress_pw_hash');
+  if (!savedHash) return false;
+
+  // Try to load data — if it works, we're authenticated
+  try {
+    const { data, error } = await sb
+      .from('app_data')
+      .select('value')
+      .eq('key', 'report_data')
+      .single();
+
+    if (data) {
+      isLoggedIn = true;
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('mainContent').classList.add('visible');
+      loadFromCloud();
+      return true;
+    }
+
+    // No data yet but table is accessible — still allow login
+    // Check if we can at least read the app_config
+    const { data: cfgData } = await sb
+      .from('app_config')
+      .select('value')
+      .eq('key', 'shared_password')
+      .single();
+
+    if (cfgData) {
+      isLoggedIn = true;
+      document.getElementById('loginScreen').style.display = 'none';
+      document.getElementById('mainContent').classList.add('visible');
+      loadFromCloud();
+      return true;
+    }
+  } catch (e) {
+    console.log('Auto-login failed:', e.message);
+  }
+
+  return false;
+}
+
+// ====== CLOUD DATA ======
+async function loadFromCloud() {
+  try {
+    const { data, error } = await sb
+      .from('app_data')
+      .select('value')
+      .eq('key', 'report_data')
+      .single();
+
+    if (data && data.value) {
+      document.getElementById('rawInput').value = data.value;
+      reportData = parseReports(data.value);
+      if (reportData && reportData.weeks.length > 0) {
+        renderAll();
+      }
+      document.getElementById('saveBtn').disabled = false;
+      return;
+    }
+  } catch (e) {
+    console.log('Load from cloud failed:', e.message);
+  }
+
+  // Fallback to localStorage
+  try {
+    const saved = localStorage.getItem('credit_progress_input');
+    if (saved) {
+      document.getElementById('rawInput').value = saved;
+      reportData = parseReports(saved);
+      if (reportData && reportData.weeks.length > 0) {
+        renderAll();
+      }
+    }
+  } catch (e) { /* ignore */ }
+
+  document.getElementById('saveBtn').disabled = false;
+}
+
+async function saveToCloud() {
+  const rawText = document.getElementById('rawInput').value;
+  if (!rawText.trim()) {
+    alert('没有数据可保存');
+    return;
+  }
+
+  const saveBtn = document.getElementById('saveBtn');
+  const saveStatus = document.getElementById('saveStatus');
+
+  saveBtn.disabled = true;
+  saveStatus.textContent = '保存中...';
+  saveStatus.className = 'save-status';
+
+  try {
+    const { error } = await sb
+      .from('app_data')
+      .upsert({ key: 'report_data', value: rawText, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+
+    if (error) throw error;
+
+    saveStatus.textContent = '✓ 已保存到云端';
+    saveStatus.className = 'save-status success';
+
+    // Also save locally
+    try { localStorage.setItem('credit_progress_input', rawText); } catch (e) { /* ignore */ }
+
+    setTimeout(() => { saveStatus.textContent = ''; }, 3000);
+  } catch (e) {
+    saveStatus.textContent = '✗ 保存失败: ' + e.message;
+    saveStatus.className = 'save-status error';
+    console.error('Save error:', e);
+  }
+
+  saveBtn.disabled = false;
+}
+
+// ====== FONT SIZE ======
+let fontScale = 1;
+const fontLabels = ['小号', '标准', '大号', '特大', '超大'];
+
+function changeFont(delta) {
+  fontScale = Math.max(0.75, Math.min(1.5, fontScale + delta * 0.125));
+  document.documentElement.style.setProperty('--font-scale', fontScale);
+  const idx = Math.round((fontScale - 0.75) / 0.25);
+  document.getElementById('fontLabel').textContent = fontLabels[Math.max(0, Math.min(4, idx))];
+  localStorage.setItem('credit_progress_font_scale', fontScale);
+}
+
+// Restore font size
+(function() {
+  const saved = localStorage.getItem('credit_progress_font_scale');
+  if (saved) {
+    fontScale = parseFloat(saved);
+    document.documentElement.style.setProperty('--font-scale', fontScale);
+    const idx = Math.round((fontScale - 0.75) / 0.25);
+    document.getElementById('fontLabel').textContent = fontLabels[Math.max(0, Math.min(4, idx))];
+  }
+})();
+
+// ====== PARSER ======
+const BANK_NAMES = ['中信', '浦发', '建行', '兴业', '浙商', '招行', '民生', '光大', '平安', '广发', '华夏', '交行', '工行', '农行', '中行'];
+const BANK_ALIASES = {
+  '中信银行': '中信', '浦发银行': '浦发', '建设银行': '建行', '建行银行': '建行',
+  '兴业银行': '兴业', '浙商银行': '浙商', '招商银行': '招行', '民生银行': '民生',
+  '光大银行': '光大', '平安银行': '平安', '广发银行': '广发', '华夏银行': '华夏',
+  '交通银行': '交行', '工商银行': '工行', '农业银行': '农行', '中国银行': '中行',
+};
+
+function parseReports(rawText) {
+  if (!rawText.trim()) return null;
+
+  let text = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const weekHeaderRegex = /^(\d+)[、，,.\s]\s*(\d{4}\.\d{1,2}\.\d{1,2})[^\n]*?(?:进展|授信|周报|汇报)/m;
+  const splitRegex = /\n(?=\d+[、，,.\s]\s*\d{4}\.\d{1,2}\.\d{1,2})/;
+
+  const sections = text.split(splitRegex).filter(s => s.trim());
+  const weeks = [];
+
+  for (let i = 0; i < sections.length; i++) {
+    const section = sections[i].trim();
+    const headerMatch = section.match(weekHeaderRegex);
+    if (!headerMatch) continue;
+
+    const date = headerMatch[2];
+    const id = parseInt(headerMatch[1]);
+    const banks = {};
+    const bodyText = section.substring(headerMatch[0].length).trim();
+
+    const bankPattern = BANK_NAMES.map(b => b.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+    const bankRegex = new RegExp(`(${bankPattern})[：:]\\s*([\\s\\S]*?)(?=\\n(?:${bankPattern})[：:]|\\n\\d+[、，]|$)`, 'g');
+
+    let match;
+    while ((match = bankRegex.exec(bodyText)) !== null) {
+      let bankName = match[1];
+      const content = match[2].trim();
+      bankName = BANK_ALIASES[bankName] || bankName;
+      banks[bankName] = content;
+    }
+
+    const fullBankRegex = new RegExp(`(${Object.keys(BANK_ALIASES).join('|')})[：:]\\s*([\\s\\S]*?)(?=\\n(?:${Object.keys(BANK_ALIASES).join('|')}|${bankPattern})[：:]|\\n\\d+[、，]|$)`, 'g');
+    while ((match = fullBankRegex.exec(bodyText)) !== null) {
+      let bankName = BANK_ALIASES[match[1]] || match[1];
+      const content = match[2].trim();
+      if (!banks[bankName]) banks[bankName] = content;
+    }
+
+    if (Object.keys(banks).length > 0) {
+      weeks.push({ id, date, banks });
+    }
+  }
+
+  const duplicates = [];
+  for (let i = 1; i < weeks.length; i++) {
+    const prev = weeks[i - 1];
+    const curr = weeks[i];
+    if (prev.date === curr.date) {
+      const prevBanks = Object.keys(prev.banks).sort().join(',');
+      const currBanks = Object.keys(curr.banks).sort().join(',');
+      if (prevBanks === currBanks) {
+        let identical = true;
+        for (const b of Object.keys(prev.banks)) {
+          if ((prev.banks[b] || '').trim() !== (curr.banks[b] || '').trim()) {
+            identical = false; break;
+          }
+        }
+        if (identical) duplicates.push(i);
+      }
+    }
+  }
+
+  return { weeks, duplicates };
+}
+
+// ====== TOKENIZER ======
+function tokenize(text) {
+  if (!text) return [];
+  const tokens = [];
+  const regex = /([^。，、；：？！\n\r]+|[。，、；：？！\n\r]+)/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const seg = match[1].trim();
+    if (seg) {
+      if (/[a-zA-Z0-9]/.test(seg) && /\s/.test(seg)) {
+        seg.split(/\s+/).forEach(s => { if (s) tokens.push(s); });
+      } else {
+        tokens.push(seg);
+      }
+    }
+  }
+  if (tokens.length === 0 && text.trim()) tokens.push(text.trim());
+  return tokens;
+}
+
+// ====== MYERS DIFF ======
+function myersDiff(oldTokens, newTokens) {
+  const n = oldTokens.length;
+  const m = newTokens.length;
+  const max = n + m;
+  const v = new Array(2 * max + 1);
+  const trace = [];
+  v[max + 1] = 0;
+
+  for (let d = 0; d <= max; d++) {
+    trace.push([...v]);
+    for (let k = -d; k <= d; k += 2) {
+      const idx = max + k;
+      let x = (k === -d || (k !== d && v[idx - 1] < v[idx + 1])) ? v[idx + 1] : v[idx - 1] + 1;
+      let y = x - k;
+      while (x < n && y < m && oldTokens[x] === newTokens[y]) { x++; y++; }
+      v[idx] = x;
+      if (x >= n && y >= m) return backtrack(trace, d, k, max, oldTokens, newTokens, n, m);
+    }
+  }
+  return [{ type: 'remove', tokens: [...oldTokens] }, { type: 'add', tokens: [...newTokens] }];
+}
+
+function backtrack(trace, d, k, max, oldTokens, newTokens, n, m) {
+  const chunks = [];
+  let x = n, y = m;
+  for (let depth = d; depth >= 0; depth--) {
+    const v = trace[depth];
+    const idx = max + k;
+    const prevX = (k === -depth || (k !== depth && v[idx - 1] < v[idx + 1])) ? v[idx + 1] : v[idx - 1] + 1;
+    const prevY = prevX - (k === -depth || (k !== depth && v[idx - 1] < v[idx + 1]) ? k + 1 : k - 1);
+    const prevK = (k === -depth || (k !== depth && v[idx - 1] < v[idx + 1])) ? k + 1 : k - 1;
+    const diagLen = x - prevX;
+    if (diagLen > 0) chunks.unshift({ type: 'equal', tokens: oldTokens.slice(prevX, x) });
+    if (depth > 0) {
+      if (prevX < x) chunks.unshift({ type: 'remove', tokens: oldTokens.slice(prevX, x) });
+      else if (prevY < y) chunks.unshift({ type: 'add', tokens: newTokens.slice(prevY, y) });
+    }
+    x = prevX; y = prevY; k = prevK;
+  }
+  return mergeAdjacent(chunks);
+}
+
+function mergeAdjacent(chunks) {
+  const merged = [];
+  for (const chunk of chunks) {
+    if (merged.length > 0 && merged[merged.length - 1].type === chunk.type) {
+      merged[merged.length - 1].tokens.push(...chunk.tokens);
+    } else {
+      merged.push({ ...chunk });
+    }
+  }
+  return merged;
+}
+
+// ====== CHANGE CLASSIFIER ======
+function classifyChange(oldText, newText) {
+  if (!oldText && !newText) return 'empty';
+  if (!oldText && newText) return 'new';
+  if (oldText && !newText) return 'removed';
+  if (oldText.trim() === newText.trim()) return 'stalled';
+
+  const oldTokens = tokenize(oldText);
+  const newTokens = tokenize(newText);
+  const totalTokens = Math.max(oldTokens.length, newTokens.length, 1);
+  const diff = myersDiff(oldTokens, newTokens);
+  let changedTokens = 0;
+  for (const chunk of diff) { if (chunk.type !== 'equal') changedTokens += chunk.tokens.length; }
+
+  const ratio = changedTokens / totalTokens;
+  if (ratio < 0.08) return 'stalled';
+  if (ratio < 0.25) return 'minor';
+  return 'progress';
+}
+
+// ====== RENDER HELPERS ======
+function escapeHTML(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function renderDiffHTML(oldText, newText) {
+  if (!oldText && !newText) return '';
+  if (!oldText) return `<span class="diff-add">${escapeHTML(newText)}</span>`;
+  if (!newText) return `<span class="diff-del">${escapeHTML(oldText)}</span>`;
+  const oldTokens = tokenize(oldText);
+  const newTokens = tokenize(newText);
+  const diff = myersDiff(oldTokens, newTokens);
+  let html = '';
+  for (const chunk of diff) {
+    const text = escapeHTML(chunk.tokens.join(''));
+    if (chunk.type === 'equal') html += text;
+    else if (chunk.type === 'add') html += `<span class="diff-add">${text}</span>`;
+    else if (chunk.type === 'remove') html += `<span class="diff-del">${text}</span>`;
+  }
+  return html;
+}
+
+function getBadgeHTML(changeType) {
+  const labels = { progress: '进展', minor: '微调', stalled: '停滞', new: '新增', removed: '移除', empty: '' };
+  return `<span class="cell-badge ${changeType}">${labels[changeType] || ''}</span>`;
+}
+
+// ====== MODAL ======
+function openModal(title, bodyHTML) {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalBody').innerHTML = bodyHTML;
+  document.getElementById('modalOverlay').classList.add('open');
+}
+
+function closeModal(event) {
+  if (event && event.target !== document.getElementById('modalOverlay')) return;
+  document.getElementById('modalOverlay').classList.remove('open');
+}
+
+// ====== RENDER: TABLE VIEW ======
+function renderTableView(data) {
+  const { weeks, duplicates } = data;
+  const allBanks = [];
+  const seen = new Set();
+  for (const w of weeks) {
+    for (const b of Object.keys(w.banks)) {
+      if (!seen.has(b)) { seen.add(b); allBanks.push(b); }
+    }
+  }
+  allBanks.sort();
+
+  let html = '<div class="table-wrap"><table><thead><tr>';
+  html += '<th class="bank-col">银行</th>';
+  for (let i = 0; i < weeks.length; i++) {
+    const dupLabel = duplicates.includes(i) ? ' ⚠️' : '';
+    html += `<th class="week-col">${weeks[i].date}${dupLabel}</th>`;
+  }
+  html += '</tr></thead><tbody>';
+
+  for (const bank of allBanks) {
+    html += '<tr>';
+    html += `<td class="bank-name">${bank}</td>`;
+    for (let i = 0; i < weeks.length; i++) {
+      const currentText = weeks[i].banks[bank] || '';
+      const prevText = i > 0 ? (weeks[i - 1].banks[bank] || '') : '';
+      let changeType = 'empty';
+      if (i === 0) changeType = currentText ? 'new' : 'empty';
+      else changeType = classifyChange(prevText, currentText);
+      const isDup = duplicates.includes(i);
+
+      html += '<td><div class="cell-content">';
+      if (isDup) html += '<span class="cell-badge dup">⚠️ 与上周重复</span>';
+      else if (changeType !== 'empty') html += getBadgeHTML(changeType);
+
+      if (currentText) {
+        const textId = `text-${bank.replace(/[^a-zA-Z一-龥]/g,'')}-${i}`;
+        const isLong = currentText.length > 100;
+        html += `<div class="cell-text ${isLong ? 'collapsed' : ''}" id="${textId}">${escapeHTML(currentText)}</div>`;
+        if (isLong) html += `<span class="cell-expand" onclick="expandCell('${textId}', this)">展开全文 ▼</span>`;
+        if (i > 0 && prevText && changeType !== 'stalled') {
+          const eOld = escapeHTML(prevText).replace(/'/g, "\\'").replace(/\\/g, '\\\\');
+          const eNew = escapeHTML(currentText).replace(/'/g, "\\'").replace(/\\/g, '\\\\');
+          html += `<span class="cell-expand" onclick="showDiffModal('${bank}', '${weeks[i-1].date}', '${weeks[i].date}', '${eOld}', '${eNew}')">对比上周 →</span>`;
+        }
+      } else {
+        html += '<span style="color:#999;font-size:0.78rem;">—</span>';
+      }
+      html += '</div></td>';
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table></div>';
+  return html;
+}
+
+function expandCell(textId, el) {
+  const cell = document.getElementById(textId);
+  if (cell) { cell.classList.remove('collapsed'); el.style.display = 'none'; }
+}
+
+function showDiffModal(bank, oldDate, newDate, oldText, newText) {
+  const txt = document.createElement('textarea');
+  txt.innerHTML = oldText; const oldDecoded = txt.value;
+  txt.innerHTML = newText; const newDecoded = txt.value;
+  const diffHTML = renderDiffHTML(oldDecoded, newDecoded);
+  openModal(`${bank} · ${oldDate} → ${newDate}`, `
+    <h4>变化对比</h4>
+    <div class="diff-text">${diffHTML}</div>
+    <p style="margin-top:10px;font-size:0.76rem;color:var(--text-secondary);">
+      <span class="diff-add">绿色</span> = 新增 &nbsp;
+      <span class="diff-del">红色删除线</span> = 删除
+    </p>`);
+}
+
+// ====== RENDER: CARD VIEW ======
+function renderCardView(data) {
+  const { weeks, duplicates } = data;
+  const allBanks = [];
+  const seen = new Set();
+  for (const w of weeks) { for (const b of Object.keys(w.banks)) { if (!seen.has(b)) { seen.add(b); allBanks.push(b); } } }
+  allBanks.sort();
+
+  let html = '<div class="card-grid">';
+  for (const bank of allBanks) {
+    html += `<div class="card"><div class="card-header">${bank}</div><div class="card-body">`;
+    for (let i = 0; i < weeks.length; i++) {
+      const currentText = weeks[i].banks[bank] || '';
+      const prevText = i > 0 ? (weeks[i - 1].banks[bank] || '') : '';
+      let changeType = 'new';
+      if (i > 0) changeType = classifyChange(prevText, currentText);
+      const isDup = duplicates.includes(i);
+      let cssClass = changeType;
+      if (isDup) cssClass = 'stalled';
+
+      html += `<div class="card-week ${cssClass}">`;
+      html += `<div class="card-week-date">${weeks[i].date}`;
+      if (isDup) html += '<span class="badge" style="background:#fce4e4;color:#a71d2a;">⚠️重复</span>';
+      else if (changeType === 'progress') html += '<span class="badge" style="background:#d4edda;color:#155724;">进展</span>';
+      else if (changeType === 'minor') html += '<span class="badge" style="background:#fff3cd;color:#856404;">微调</span>';
+      else if (changeType === 'stalled') html += '<span class="badge" style="background:#fce4e4;color:#a71d2a;">停滞</span>';
+      else if (changeType === 'new') html += '<span class="badge" style="background:#d1ecf1;color:#0c5460;">首周</span>';
+      html += '</div>';
+      html += currentText ? `<div class="card-week-text">${escapeHTML(currentText)}</div>` : '<div class="card-week-text" style="color:#999;">—</div>';
+      html += '</div>';
+    }
+    html += '</div></div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+// ====== RENDER: DIFF DETAIL VIEW ======
+function renderDiffView(data) {
+  const { weeks, duplicates } = data;
+  const allBanks = [];
+  const seen = new Set();
+  for (const w of weeks) { for (const b of Object.keys(w.banks)) { if (!seen.has(b)) { seen.add(b); allBanks.push(b); } } }
+  allBanks.sort();
+
+  const changes = [];
+  for (const bank of allBanks) {
+    for (let i = 1; i < weeks.length; i++) {
+      const oldText = weeks[i - 1].banks[bank] || '';
+      const newText = weeks[i].banks[bank] || '';
+      const changeType = classifyChange(oldText, newText);
+      if (changeType === 'empty') continue;
+      const oldTokens = tokenize(oldText), newTokens = tokenize(newText);
+      const diff = myersDiff(oldTokens, newTokens);
+      let changedCount = 0;
+      for (const chunk of diff) { if (chunk.type !== 'equal') changedCount += chunk.tokens.length; }
+      changes.push({ bank, oldDate: weeks[i-1].date, newDate: weeks[i].date, changeType, changedCount, oldText, newText, diff, isDup: duplicates.includes(i) });
+    }
+  }
+
+  const typeOrder = { progress: 0, minor: 1, stalled: 2, new: 3, removed: 4 };
+  changes.sort((a, b) => {
+    if (a.isDup !== b.isDup) return a.isDup ? 1 : -1;
+    if (a.changeType !== b.changeType) return (typeOrder[a.changeType]||5) - (typeOrder[b.changeType]||5);
+    return b.changedCount - a.changedCount;
+  });
+
+  if (changes.length === 0) return '<div style="text-align:center;padding:40px;color:var(--text-secondary);">暂无足够数据对比（至少需要两周数据）</div>';
+
+  let html = '<div class="diff-list">';
+  for (const c of changes) {
+    html += `<div class="diff-item ${c.changeType}">`;
+    html += `<div class="diff-item-header"><span class="diff-item-bank">${c.bank}</span><span class="diff-item-weeks">${c.oldDate} → ${c.newDate}</span>${getBadgeHTML(c.changeType)}${c.isDup ? '<span class="cell-badge dup">⚠️重复</span>' : ''}</div>`;
+    html += `<div class="diff-item-body">${c.isDup ? '<strong>⚠️ 此周数据与上周完全一致，可能为复制粘贴错误。</strong>' : renderDiffHTML(c.oldText, c.newText)}</div>`;
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+// ====== RENDER: SUMMARY VIEW ======
+function renderSummaryView(data) {
+  const { weeks, duplicates } = data;
+  const allBanks = [];
+  const seen = new Set();
+  for (const w of weeks) { for (const b of Object.keys(w.banks)) { if (!seen.has(b)) { seen.add(b); allBanks.push(b); } } }
+  allBanks.sort();
+
+  const bankStats = [];
+  for (const bank of allBanks) {
+    let progress = 0, minor = 0, stalled = 0, total = 0;
+    for (let i = 1; i < weeks.length; i++) {
+      const ct = classifyChange(weeks[i-1].banks[bank]||'', weeks[i].banks[bank]||'');
+      if (ct === 'empty') continue;
+      total++;
+      if (ct === 'progress') progress++; else if (ct === 'minor') minor++; else if (ct === 'stalled') stalled++;
+    }
+    bankStats.push({ bank, progress, minor, stalled, total, score: total > 0 ? Math.round(progress/total*100) : 0 });
+  }
+
+  let totalComparisons = 0, totalProgress = 0, totalMinor = 0, totalStalled = 0;
+  for (const bs of bankStats) { totalComparisons += bs.total; totalProgress += bs.progress; totalMinor += bs.minor; totalStalled += bs.stalled; }
+
+  let html = '';
+  if (duplicates.length > 0) {
+    html += '<div class="warnings"><strong>⚠️ 检测到重复周次：</strong>' +
+      duplicates.map(idx => `第${weeks[idx].id}条（${weeks[idx].date}）与上一条完全一致，可能为复制粘贴错误。`).join('；') + '</div>';
+  }
+
+  html += '<div class="summary-grid">';
+  html += `<div class="summary-card"><h3>📊 总体概览</h3>
+    <div class="summary-stat"><span>统计周数</span><span class="val">${weeks.length}</span></div>
+    <div class="summary-stat"><span>覆盖银行</span><span class="val">${allBanks.length}</span></div>
+    <div class="summary-stat"><span>周间对比次数</span><span class="val">${totalComparisons}</span></div>
+    <div class="summary-stat"><span>重复周次</span><span class="val" style="color:#dc3545">${duplicates.length}</span></div></div>`;
+  html += `<div class="summary-card"><h3>📈 变化分布</h3>
+    <div class="summary-stat"><span>🟢 实质进展</span><span class="val">${totalProgress} 次</span></div>
+    <div class="summary-stat"><span>🟡 微调</span><span class="val">${totalMinor} 次</span></div>
+    <div class="summary-stat"><span>🔴 停滞</span><span class="val">${totalStalled} 次</span></div>
+    <div class="progress-bar"><div class="progress-bar-fill good" style="width:${totalComparisons>0?totalProgress/totalComparisons*100:0}%"></div></div></div>`;
+  html += '</div>';
+
+  html += '<h3 style="margin-bottom:10px;font-size:0.93rem;">各银行进展评分</h3><div class="summary-grid">';
+  for (const bs of bankStats) {
+    let barClass = 'bad';
+    if (bs.score >= 50) barClass = 'good'; else if (bs.score >= 25) barClass = 'warn';
+    html += `<div class="summary-card"><h3>${bs.bank}</h3>
+      <div class="summary-stat"><span>进展</span><span class="val" style="color:#28a745">${bs.progress}</span></div>
+      <div class="summary-stat"><span>微调</span><span class="val" style="color:#ffc107">${bs.minor}</span></div>
+      <div class="summary-stat"><span>停滞</span><span class="val" style="color:#dc3545">${bs.stalled}</span></div>
+      <div class="progress-bar"><div class="progress-bar-fill ${barClass}" style="width:${bs.score}%"></div></div>
+      <div style="font-size:0.73rem;color:var(--text-secondary);margin-top:4px;">进展率 ${bs.score}%</div></div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
+// ====== SWITCH TABS ======
+function switchTab(tabName) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  const tabMap = { table: 0, card: 1, diff: 2, summary: 3 };
+  document.querySelectorAll('.tab')[tabMap[tabName]||0].classList.add('active');
+  document.getElementById(`view-${tabName}`).classList.add('active');
+}
+
+// ====== INPUT TOGGLE ======
+function toggleInput() {
+  document.getElementById('inputToggle').classList.toggle('open');
+  document.getElementById('inputBody').classList.toggle('open');
+}
+
+// ====== MAIN ======
+function parseAndRender() {
+  const rawText = document.getElementById('rawInput').value;
+  if (!rawText.trim()) { alert('请先粘贴原始周报文字'); return; }
+  reportData = parseReports(rawText);
+  if (!reportData || reportData.weeks.length === 0) {
+    alert('未能解析出有效数据，请检查格式。\n\n期望格式：\n1、2026.4.30授信进展如下：\n中信：...\n浦发：...');
+    return;
+  }
+  try { localStorage.setItem('credit_progress_input', rawText); } catch (e) { /* ignore */ }
+  renderAll();
+}
+
+function renderAll() {
+  if (!reportData) return;
+  document.getElementById('view-table').innerHTML = renderTableView(reportData);
+  document.getElementById('view-card').innerHTML = renderCardView(reportData);
+  document.getElementById('view-diff').innerHTML = renderDiffView(reportData);
+  document.getElementById('view-summary').innerHTML = renderSummaryView(reportData);
+  const warningsEl = document.getElementById('warnings');
+  const internalWarnings = reportData.duplicates || [];
+  if (internalWarnings.length > 0) {
+    warningsEl.style.display = 'block';
+    warningsEl.innerHTML = '<strong>⚠️ 检测到重复周次：</strong>' +
+      internalWarnings.map(idx => `第${reportData.weeks[idx].id}条（${reportData.weeks[idx].date}）与上一条完全一致，可能是复制粘贴错误。`).join('；');
+  } else { warningsEl.style.display = 'none'; }
+}
+
+function loadDemo() {
+  const demo = `1、2026.4.30授信进展如下：
+中信：3月初已还本5000万，剩余1000万6月初到期，等节后两周内新风险总监（原风险领导对行业持退出意见）到位后，王惠再次沟通续贷方案，金额未定；我方预估会整体退出，备选用浙商沟通增额覆盖。
+
+浦发：3月底已还本1.5亿结清余额，因分行一把手有松口迹象，需要等吕行节后两周内约上分行对公副行长再次沟通应收账款质押可行性，方案为表面敞口1.2亿，实际敞口3000万；我方预估6月落地。
+
+建行：审批员对行业合规无意见，等节后2周内约上分行对公副行长后（审批会签审人，目前不在深圳，秘书不确定第一周能否返深），再次上会（集团额度+两个主体信用额度+固贷+流贷），上会后一周内出批复；我方预估最迟5.18-22能确定。
+
+兴业：已同步建行时间线，预计建行批复后两周内出批复。
+
+浙商：3000万敞口8月到期，已确定新续最低5000万起，争取沟通涵盖中信缺口。
+
+2、2026.5.9授信进展如下：
+中信：3月初已还本5000万，剩余1000万6月初到期，新风险总监已到位，昨天王惠已再次向信审汇报续贷方案，但还需信审内部讨论+咨询百信余额（余额持续下降，当前43亿）；我方预估会整体退出，备选用浙商沟通增额覆盖。
+
+浦发：3月底已还本1.5亿结清余额，节后吕行已跟对公副行长沟通，同意继续报批，现等客户经理邓林两周内更新年报数据后重新上会，预计5.25-29可以排上会，方案为应收账款质押做增信措施，表面敞口1.2亿，实际敞口3000万；我方预估6月落地。
+
+建行：下周二（5.12）上会（集团额度+两个主体信用额度+固贷+流贷），上会后一周内出批复+分行一把手签字；我方预估最迟5.18-22能确定。
+
+浙商：已确认待3000万银票8月到期后增至5000万国内证（分期乐网络做主体，开证给软件4000万+1个小主体1000万，需等税务8月确认关联交易情况）；目前现已经开始续贷数据整理提供，争取沟通增额到8000万覆盖中信缺口
+
+兴业：暂无进展
+
+3、2026.5.15授信进展如下：
+中信：3月初已还本5000万，剩余1000万6月初到期，目前信审还在看材料，预计月底反馈；我方预估会整体退出，备选用浙商沟通增额覆盖。
+
+浦发：3月底已还本1.5亿结清余额，现等客户经理邓林还在更新年报数据后重新上会，预计5.25-29可以排上会，方案为应收账款质押做增信措施，表面敞口1.2亿，实际敞口3000万；我方预估6月落地。
+
+建行：阎行已党校培训返深，下周二（5.19）上会（集团额度+两个主体信用额度+固贷+流贷），上会后一周内出批复+分行一把手签字+法审签约；争取月底前先将流贷提款，若周二批复确定，将开始开户流程，避免耽误提款。
+
+浙商：已确认待3000万银票8月到期后增至5000万国内证（分期乐网络做主体，开证给软件4000万+1个小主体1000万，需等税务8月确认关联交易情况）；目前现已经开始续贷数据整理提供，争取沟通增额到8000万覆盖中信缺口
+
+兴业：暂无进展`;
+  document.getElementById('rawInput').value = demo;
+  parseAndRender();
+}
+
+function clearAll() {
+  if (confirm('确定清空所有数据？')) {
+    document.getElementById('rawInput').value = '';
+    reportData = null;
+    ['view-table','view-card','view-diff','view-summary'].forEach(id => document.getElementById(id).innerHTML = '');
+    document.getElementById('warnings').style.display = 'none';
+    try { localStorage.removeItem('credit_progress_input'); } catch(e) {}
+  }
+}
+
+// ====== INIT ======
+function init() {
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && document.activeElement === document.getElementById('passwordInput')) {
+      doLogin();
+    }
+    if (e.ctrlKey && e.key === 'Enter' && isLoggedIn) {
+      parseAndRender();
+    }
+    if (e.key === 'Escape') closeModal();
+  });
+
+  document.getElementById('modalOverlay').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+  });
+
+  // Try auto-login
+  tryAutoLogin().then(success => {
+    if (!success) {
+      document.getElementById('loginScreen').style.display = 'flex';
+    }
+  });
+}
+
+init();
+</script>
+
+</body>
+</html>
